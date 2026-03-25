@@ -1,63 +1,100 @@
 'use client';
 
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { Send } from 'lucide-react';
 import TextareaAutosize from 'react-textarea-autosize';
 
 interface ReflectWidgetProps {
   id: string;
   question: string;
+  userName: string;
   placeholder?: string;
-  onSave?: (id: string, text: string, name: string) => void;
+  onComplete?: (id: string, text: string) => void;
+  isLastQuestion?: boolean;
+  onSubmitAll?: (responses: Record<string, string>) => void;
 }
 
 export default function ReflectWidget({
   id,
   question,
+  userName,
   placeholder = 'Type your response...',
-  onSave,
+  onComplete,
+  isLastQuestion = false,
+  onSubmitAll,
 }: ReflectWidgetProps) {
   const [inputText, setInputText] = useState('');
-  const [userName, setUserName] = useState('');
   const [isFocused, setIsFocused] = useState(false);
   const [isSubmitted, setIsSubmitted] = useState(false);
   const [isSaving, setIsSaving] = useState(false);
-  const [saveError, setSaveError] = useState(false);
+
+  // 存储所有问题的回答
+  const [responses, setResponses] = useState<Record<string, string>>({});
+
+  // 从 localStorage 加载已保存的回答
+  useEffect(() => {
+    const saved = localStorage.getItem('reflection_responses');
+    if (saved) {
+      setResponses(JSON.parse(saved));
+    }
+  }, []);
 
   const handleSubmit = async () => {
     if (!inputText.trim() || !userName.trim()) return;
 
     setIsSaving(true);
-    setSaveError(false);
 
     try {
-      onSave?.(id, inputText, userName);
+      // 保存当前回答
+      const updatedResponses = { ...responses, [id]: inputText };
+      setResponses(updatedResponses);
+      localStorage.setItem('reflection_responses', JSON.stringify(updatedResponses));
 
-      // 发送到本地 API
-      const response = await fetch('/api/reflections', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          question_id: id,
-          question: question,
-          name: userName,
-          response: inputText,
-        }),
-      });
+      onComplete?.(id, inputText);
 
-      if (!response.ok) {
-        throw new Error('Failed to send');
+      // 如果是最后一个问题，合并所有回答提交
+      if (isLastQuestion && onSubmitAll) {
+        await submitAllResponses(updatedResponses);
       }
 
       setIsSubmitted(true);
     } catch (error) {
-      console.error('Send error:', error);
-      setSaveError(true);
-      // 即使发送失败也显示已提交
-      setIsSubmitted(true);
+      console.error('Save error:', error);
     } finally {
       setIsSaving(false);
     }
+  };
+
+  const submitAllResponses = async (finalResponses: Record<string, string>) => {
+    const allResponses = [
+      { question_id: 'q1', question: 'Part I Reflection' },
+      { question_id: 'q2', question: 'Part II Reflection' },
+      { question_id: 'q3', question: 'Part III Reflection' },
+    ];
+
+    const combinedResponse = allResponses
+      .map((q) => `${q.question}: ${finalResponses[q.question_id] || 'Not answered'}`)
+      .join('\n\n---\n\n');
+
+    const response = await fetch('/api/reflections', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        question_id: 'complete',
+        question: 'Complete Reflection (All 3 Parts)',
+        name: userName,
+        response: combinedResponse,
+        individual_responses: finalResponses,
+      }),
+    });
+
+    if (!response.ok) {
+      throw new Error('Failed to save');
+    }
+
+    // 提交后清除 localStorage
+    localStorage.removeItem('reflection_responses');
+    onSubmitAll?.(finalResponses);
   };
 
   const handleKeyDown = (e: React.KeyboardEvent<HTMLTextAreaElement>) => {
@@ -73,11 +110,16 @@ export default function ReflectWidget({
         <div className="rounded-xl bg-bg-bubble p-5 text-text-primary">
           <p className="mb-4">{question}</p>
           <div className="rounded-lg bg-white p-4 text-text-primary">
-            <p className="mb-2 text-sm text-gray-500">Name: {userName}</p>
-            <p className="whitespace-pre-wrap">{inputText}</p>
+            <p className="whitespace-pre-wrap">{responses[id]}</p>
           </div>
         </div>
-        <p className="mt-3 text-sm text-gray-500">Thank you for sharing your reflection.</p>
+        {isLastQuestion ? (
+          <p className="mt-3 text-sm text-green-600 font-medium">
+            All reflections submitted. Thank you for sharing!
+          </p>
+        ) : (
+          <p className="mt-3 text-sm text-gray-500">Continue reading to reflect more.</p>
+        )}
       </div>
     );
   }
@@ -89,21 +131,6 @@ export default function ReflectWidget({
       </div>
 
       <div className="space-y-4">
-        {/* Name Input */}
-        <div>
-          <label htmlFor={`name-${id}`} className="mb-1 block text-sm font-medium text-gray-700">
-            Your Name
-          </label>
-          <input
-            id={`name-${id}`}
-            type="text"
-            value={userName}
-            onChange={(e) => setUserName(e.target.value)}
-            placeholder="How should we address you?"
-            className="w-full rounded-lg border border-gray-300 bg-white px-4 py-2.5 text-text-primary placeholder:text-gray-400 focus:border-blue-500 focus:outline-none focus:ring-2 focus:ring-blue-500/20"
-          />
-        </div>
-
         {/* Response Textarea */}
         <div>
           <label htmlFor={`response-${id}`} className="mb-1 block text-sm font-medium text-gray-700">
@@ -145,11 +172,6 @@ export default function ReflectWidget({
           <p className="mt-2 text-xs text-gray-400">
             Press Enter to send, Shift + Enter for new line
           </p>
-          {saveError && (
-            <p className="mt-1 text-xs text-red-500">
-              Note: Your response was saved locally.
-            </p>
-          )}
         </div>
       </div>
     </div>
