@@ -1,22 +1,31 @@
 import { NextResponse } from 'next/server';
-import Database from 'better-sqlite3';
+import fs from 'fs';
 import path from 'path';
 
-// 初始化数据库
-const dbPath = path.join(process.cwd(), 'data', 'reflections.db');
-const db = new Database(dbPath);
+// 数据文件路径
+const dataDir = path.join(process.cwd(), 'data');
+const dataFile = path.join(dataDir, 'reflections.json');
 
-// 创建表（如果不存在）
-db.exec(`
-  CREATE TABLE IF NOT EXISTS reflections (
-    id INTEGER PRIMARY KEY AUTOINCREMENT,
-    question_id TEXT NOT NULL,
-    question TEXT NOT NULL,
-    name TEXT NOT NULL,
-    response TEXT NOT NULL,
-    created_at DATETIME DEFAULT CURRENT_TIMESTAMP
-  )
-`);
+// 确保数据目录存在
+if (!fs.existsSync(dataDir)) {
+  fs.mkdirSync(dataDir, { recursive: true });
+}
+
+// 初始化数据文件（如果不存在）
+if (!fs.existsSync(dataFile)) {
+  fs.writeFileSync(dataFile, '[]', 'utf-8');
+}
+
+// 读取数据
+function readData() {
+  const content = fs.readFileSync(dataFile, 'utf-8');
+  return JSON.parse(content);
+}
+
+// 写入数据
+function writeData(data: any[]) {
+  fs.writeFileSync(dataFile, JSON.stringify(data, null, 2), 'utf-8');
+}
 
 export async function POST(request: Request) {
   try {
@@ -29,25 +38,22 @@ export async function POST(request: Request) {
       );
     }
 
-    const stmt = db.prepare(`
-      INSERT INTO reflections (question_id, question, name, response, created_at)
-      VALUES (?, ?, ?, ?, ?)
-    `);
-
-    const result = stmt.run(
+    const data = readData();
+    const newEntry = {
+      id: Date.now().toString(),
       question_id,
       question,
       name,
       response,
-      new Date().toISOString()
-    );
+      created_at: new Date().toISOString(),
+    };
 
-    return NextResponse.json({
-      success: true,
-      id: result.lastInsertRowid
-    });
+    data.push(newEntry);
+    writeData(data);
+
+    return NextResponse.json({ success: true, id: newEntry.id });
   } catch (error) {
-    console.error('Database error:', error);
+    console.error('Save error:', error);
     return NextResponse.json(
       { error: 'Failed to save response' },
       { status: 500 }
@@ -57,10 +63,10 @@ export async function POST(request: Request) {
 
 export async function GET() {
   try {
-    const rows = db.prepare('SELECT * FROM reflections ORDER BY created_at DESC').all();
-    return NextResponse.json({ success: true, data: rows });
+    const data = readData();
+    return NextResponse.json({ success: true, data });
   } catch (error) {
-    console.error('Database error:', error);
+    console.error('Read error:', error);
     return NextResponse.json(
       { error: 'Failed to fetch data' },
       { status: 500 }
