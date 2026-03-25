@@ -22,6 +22,8 @@ export default function ReflectWidget({
   const [inputText, setInputText] = useState('');
   const [isFocused, setIsFocused] = useState(false);
   const [isSubmitted, setIsSubmitted] = useState(false);
+  const [isSaving, setIsSaving] = useState(false);
+  const [saveError, setSaveError] = useState(false);
 
   // Parse question text to highlight key phrases (text between **bold** markers)
   const parseQuestion = (text: string) => {
@@ -32,11 +34,39 @@ export default function ReflectWidget({
       .replace(/see for yourself/g, '<em class="font-semibold">see for yourself</em>');
   };
 
-  const handleSubmit = () => {
+  const handleSubmit = async () => {
     if (!inputText.trim()) return;
 
-    onSave?.(id, inputText);
-    setIsSubmitted(true);
+    setIsSaving(true);
+    setSaveError(false);
+
+    try {
+      // Save to local state
+      onSave?.(id, inputText);
+
+      // Send to Supabase via API
+      const response = await fetch('/api/reflections', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          question_id: id,
+          response: inputText,
+        }),
+      });
+
+      if (!response.ok) {
+        throw new Error('Failed to save');
+      }
+
+      setIsSubmitted(true);
+    } catch (error) {
+      console.error('Save error:', error);
+      setSaveError(true);
+      // Still mark as submitted locally
+      setIsSubmitted(true);
+    } finally {
+      setIsSaving(false);
+    }
   };
 
   const handleKeyDown = (e: React.KeyboardEvent<HTMLTextAreaElement>) => {
@@ -101,17 +131,26 @@ export default function ReflectWidget({
 
               <button
                 onClick={handleSubmit}
-                disabled={!inputText.trim()}
+                disabled={!inputText.trim() || isSaving}
                 className="absolute bottom-3 right-3 flex h-9 w-9 items-center justify-center rounded-full bg-brand-blue text-white transition-opacity hover:bg-brand-dark-blue disabled:opacity-50"
                 aria-label="Send response"
               >
-                <Send className="h-4 w-4" />
+                {isSaving ? (
+                  <div className="h-4 w-4 animate-spin rounded-full border-2 border-white border-t-transparent" />
+                ) : (
+                  <Send className="h-4 w-4" />
+                )}
               </button>
             </div>
 
             <p className="mt-2 text-xs text-gray-400">
               Press Enter to send, Shift + Enter for new line
             </p>
+            {saveError && (
+              <p className="mt-1 text-xs text-red-500">
+                Note: Your response was saved locally but may not have been recorded on our server.
+              </p>
+            )}
           </div>
         </div>
       </div>
