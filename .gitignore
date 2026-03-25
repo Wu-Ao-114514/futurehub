@@ -19,6 +19,10 @@
 .env
 .env.example
 
+# database
+*.db
+/data/*.db
+
 # typescript
 *.tsbuildinfo
 next-env.d.ts

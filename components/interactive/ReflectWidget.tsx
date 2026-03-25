@@ -33,8 +33,8 @@ export default function ReflectWidget({
     try {
       onSave?.(id, inputText, userName);
 
-      // 发送到 Formspree
-      const response = await fetch(`https://formspree.io/f/YOUR_FORM_ID`, {
+      // 发送到本地 API
+      const response = await fetch('/api/reflections', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
