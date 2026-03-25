@@ -3,9 +3,9 @@ import { createClient } from '@supabase/supabase-js';
 
 export async function POST(request: Request) {
   try {
-    const { question_id, response } = await request.json();
+    const { question_id, response, name } = await request.json();
 
-    if (!question_id || !response) {
+    if (!question_id || !response || !name) {
       return NextResponse.json(
         { error: 'Missing required fields' },
         { status: 400 }
@@ -23,6 +23,7 @@ export async function POST(request: Request) {
         {
           question_id,
           response,
+          name,
           created_at: new Date().toISOString(),
         },
       ]);
