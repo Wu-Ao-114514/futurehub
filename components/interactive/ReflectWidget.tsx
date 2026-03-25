@@ -8,7 +8,6 @@ interface ReflectWidgetProps {
   id: string;
   question: string;
   placeholder?: string;
-  isHighlighted?: boolean;
   onSave?: (id: string, text: string, name: string) => void;
 }
 
@@ -16,7 +15,6 @@ export default function ReflectWidget({
   id,
   question,
   placeholder = 'Type your response...',
-  isHighlighted = false,
   onSave,
 }: ReflectWidgetProps) {
   const [inputText, setInputText] = useState('');
@@ -35,24 +33,27 @@ export default function ReflectWidget({
     try {
       onSave?.(id, inputText, userName);
 
-      const response = await fetch('/api/reflections', {
+      // 发送到 Formspree
+      const response = await fetch(`https://formspree.io/f/YOUR_FORM_ID`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           question_id: id,
-          response: inputText,
+          question: question,
           name: userName,
+          response: inputText,
         }),
       });
 
       if (!response.ok) {
-        throw new Error('Failed to save');
+        throw new Error('Failed to send');
       }
 
       setIsSubmitted(true);
     } catch (error) {
-      console.error('Save error:', error);
+      console.error('Send error:', error);
       setSaveError(true);
+      // 即使发送失败也显示已提交
       setIsSubmitted(true);
     } finally {
       setIsSaving(false);
@@ -146,7 +147,7 @@ export default function ReflectWidget({
           </p>
           {saveError && (
             <p className="mt-1 text-xs text-red-500">
-              Note: Your response was saved locally but may not have been recorded on our server.
+              Note: Your response was saved locally.
             </p>
           )}
         </div>
